@@ -96,8 +96,8 @@ def ndev_data(images, labels, num_classes, total_num_examples, devices, is_train
     # construct each replica
     replica_grads = []
     with tf.device(builder.variable_device()):
-        image_slices = tf.split(0, len(devices), images)
-        label_slices = tf.split(0, len(devices), labels)
+        image_slices = tf.split(images, len(devices), 0)
+        label_slices = tf.split(labels, len(devices), 0)
     with tf.variable_scope('model') as vsp:
         # we only want scope for variables but not operations
         with tf.name_scope(''):
