@@ -107,7 +107,7 @@ def ndev_data(images, labels, num_classes, total_num_examples, devices, is_train
                 with tf.name_scope('tower_{}'.format(i)) as name_scope:
                     with tf.device(dev):
                         #building up network layers by calling alexnet_inference/vgg_inference using the sub tensors you created in Step 3
-                        net, logits, total_loss = alexnet_inference(builder, image_slices[i],label_slices[i], num_classes,name_scope)
+                        net, logits, total_loss = alexnet_inference(builder, image_list[i], label_list[i], num_classes,name_scope)
                         # calculate gradients for batch in this replica
                         tmp_grads = opt.compute_gradients(total_loss)
 
