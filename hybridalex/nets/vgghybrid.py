@@ -29,47 +29,47 @@ def original(images, labels, num_classes, total_num_examples, devices=None, is_t
 
 
 def ndev_data(images, labels, num_classes, total_num_examples, devices, is_train=True):
-    """Build inference, data parallelism"""
-    # use the last device in list as variable device
-    devices = devices[:]
-    builder = ModelBuilder(devices.pop())
+    # Your code starts here...
+    devices_list = devices[:]
 
+    # Use first device as the variable device. 
+    builder = ModelBuilder(devices_list[0])
+    devices_list = devices_list[1:]
+
+    # If is_not_train, return alexnet_eval()
     if not is_train:
-        with tf.variable_scope('model'):
-            prob = vgg_inference(builder, images, labels, num_classes)[0]
-        return vgg_eval(prob, labels)
+        net, _, _ = vgg_inference(builder, images, labels, num_classes)
+        return vgg_eval(net, labels)
+
 
     global_step = builder.ensure_global_step()
     opt = tf.train.AdamOptimizer(learning_rate=0.01)
 
     # construct each replica
-    replica_grads = []
+    grads_list = []
     with tf.device(builder.variable_device()):
-        image_slices = tf.split(images, len(devices), 0)
-        label_slices = tf.split(labels, len(devices), 0)
-    with tf.variable_scope('model') as vsp:
-        # we only want scope for variables but not operations
+        image_list = tf.split(images, len(devices_list), 0)
+        label_list = tf.split(labels, len(devices_list), 0)
+    with tf.variable_scope('model') as var_scope:
         with tf.name_scope(''):
-            for idx in range(len(devices)):
-                dev = devices[idx]
-                with tf.name_scope('tower_{}'.format(idx)) as scope:
+            for i in range(len(devices_list)):
+                dev = devices_list[i]
+                with tf.name_scope('tower_{}'.format(idx)) as name_scope:
                     with tf.device(dev):
-                        prob, logits, total_loss = vgg_inference(builder, image_slices[idx],
-                                                                 label_slices[idx], num_classes,
-                                                                 scope)
+                        #building up network layers by calling alexnet_inference/vgg_inference using the sub tensors you created in Step 3
+                        net, logits, total_loss = vgg_inference(builder, image_list[idx], label_list[idx], num_classes, name_scope)
                         # calculate gradients for batch in this replica
-                        grads = opt.compute_gradients(total_loss)
+                        tmp_grads = opt.compute_gradients(total_loss)
 
-                replica_grads.append(grads)
+                grads_list.append(tmp_grads)
                 # reuse variable for next replica
-                vsp.reuse_variables()
+                var_scope.reuse_variables()
 
-    # average gradients across replica
+    #On the parameter server node, calculate the average accross the gradients you collect. You should call average_gradents method definded in the ModuleBuilder class for this step. This method will transfer gradients from the worker nodes to the parameter server.
     with tf.device(builder.variable_device()):
-        grads = builder.average_gradients(replica_grads)
-        apply_grads_op = opt.apply_gradients(grads, global_step=global_step)
+        gradients = builder.average_gradients(grads_list)
+        apply_gradient_op = opt.apply_gradients(gradients, global_step=global_step)
+        train_op = tf.group(apply_gradient_op, name='train')
 
-        train_op = tf.group(apply_grads_op, name='train')
-
-    # simply return prob, logits, total_loss from the last replica for simple evaluation
-    return prob, logits, total_loss, train_op, global_step
+    #Finally, return the same parameters as the single-machine version code does.
+    return net, logits, total_loss, train_op, global_step
